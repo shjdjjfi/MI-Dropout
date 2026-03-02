@@ -1,0 +1,13 @@
+direction,count,percentage
+Generation / Diffusion / AIGC,252,20.1600
+Other / General Multimedia,248,19.8400
+Foundation Models / LLM / MLLM,219,17.5200
+Vision-Language / Multimodal Understanding,136,10.8800
+Video Understanding / Temporal Modeling,132,10.5600
+Retrieval / Recommendation / Search,73,5.8400
+3D / Embodied / Spatial,62,4.9600
+Security / Privacy / Watermark,38,3.0400
+Efficiency / Optimization / Compression,29,2.3200
+Graph / Knowledge / Causality,29,2.3200
+Audio / Speech / Music,17,1.3600
+Medical / Bio / Healthcare,15,1.2000
