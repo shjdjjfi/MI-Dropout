@@ -17,9 +17,36 @@ PAGES = {
 }
 
 OUT_DIR = Path(__file__).resolve().parent
-CSV_PATH = OUT_DIR / "acmmm2025_accepted_papers_by_category.csv"
-SVG_PATH = OUT_DIR / "acmmm2025_accepted_papers_by_category.svg"
+CSV_CATEGORY_PATH = OUT_DIR / "acmmm2025_accepted_papers_by_category.csv"
+CSV_ALL_PATH = OUT_DIR / "acmmm2025_all_papers_screening.csv"
 MD_PATH = OUT_DIR / "acmmm2025_accepted_papers_summary.md"
+
+EASY_INFERENCE_KEYWORDS = [
+    "normalization", "calibration", "re-ranking", "reranking", "sinkhorn", "hubness",
+    "score", "logit", "temperature",
+]
+
+EASY_TRAINING_KEYWORDS = [
+    "distillation", "kd", "weighted", "reweight", "regularization", "contrastive",
+    "margin", "debias", "bias", "hard negative",
+]
+
+PLUGIN_KEYWORDS = ["prompt", "prompting", "adapter", "lora", "token", "memory", "bank", "plug-and-play"]
+
+EASY_STYLE_KEYWORDS = ["simple", "efficient", "lightweight", "plug-and-play"]
+
+PASS_KEYWORDS = [
+    "unified framework", "end-to-end system", "multi-stage", "tri-branch", "hierarchical transformer",
+    "new dataset", "benchmark", "annotation",
+]
+
+TASK_KEYWORDS = {
+    "Retrieval": ["retrieval", "search", "rerank"],
+    "Video": ["video", "temporal", "moment", "action"],
+    "VLM": ["vlm", "multimodal", "vision-language", "vision language", "mllm", "llm"],
+    "Seg": ["segmentation", "segment", "mask"],
+    "Audio": ["audio", "speech", "music"],
+}
 
 
 def fetch_page_content(slug: str) -> str:
@@ -31,93 +58,180 @@ def fetch_page_content(slug: str) -> str:
     return html.unescape(payload[0]["content"]["rendered"])
 
 
-def count_accepted_entries(rendered_content: str) -> int:
-    return len(re.findall(r"<p>\s*\d+\s*<b>", rendered_content))
+def clean_html(text: str) -> str:
+    text = re.sub(r"<.*?>", "", text)
+    text = text.replace("\xa0", " ")
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def build_svg(rows):
-    width, height = 1200, 720
-    margin_left, margin_right, margin_top, margin_bottom = 110, 40, 80, 170
-    chart_w = width - margin_left - margin_right
-    chart_h = height - margin_top - margin_bottom
+def extract_entries(rendered_content: str):
+    pattern = re.compile(r"<p>\s*(\d+)\s*<b>(.*?)</b><br\s*/?>\s*(.*?)</p>", re.IGNORECASE)
+    entries = []
+    for num, title_html, authors_html in pattern.findall(rendered_content):
+        entries.append(
+            {
+                "id": int(num),
+                "title": clean_html(title_html),
+                "authors": clean_html(authors_html),
+            }
+        )
+    return entries
 
-    max_count = max(r["count"] for r in rows)
-    bar_gap = 20
-    n = len(rows)
-    bar_w = (chart_w - bar_gap * (n - 1)) / n
 
-    colors = ["#4C78A8", "#F58518", "#E45756", "#72B7B2", "#54A24B", "#EECA3B", "#B279A2"]
+def contains_any(text: str, keywords):
+    lowered = text.lower()
+    return any(k in lowered for k in keywords)
 
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        '<rect width="100%" height="100%" fill="white"/>',
-        '<text x="600" y="40" text-anchor="middle" font-size="28" font-family="Arial" font-weight="bold">ACM MM 2025 Accepted Papers by Category</text>',
-        '<text x="600" y="66" text-anchor="middle" font-size="16" font-family="Arial" fill="#444">Source: acmmm2025.org accepted papers pages</text>',
-        f'<line x1="{margin_left}" y1="{margin_top + chart_h}" x2="{margin_left + chart_w}" y2="{margin_top + chart_h}" stroke="#222" stroke-width="2"/>',
-        f'<line x1="{margin_left}" y1="{margin_top}" x2="{margin_left}" y2="{margin_top + chart_h}" stroke="#222" stroke-width="2"/>',
-    ]
 
-    ticks = 5
-    for i in range(ticks + 1):
-        y = margin_top + chart_h - (chart_h * i / ticks)
-        val = int(max_count * i / ticks)
-        parts.append(f'<line x1="{margin_left-6}" y1="{y:.1f}" x2="{margin_left}" y2="{y:.1f}" stroke="#222"/>')
-        parts.append(f'<text x="{margin_left-12}" y="{y+5:.1f}" text-anchor="end" font-size="12" font-family="Arial">{val}</text>')
-        if i > 0:
-            parts.append(f'<line x1="{margin_left}" y1="{y:.1f}" x2="{margin_left+chart_w}" y2="{y:.1f}" stroke="#ddd" stroke-dasharray="3,4"/>')
+def hit_keywords(text: str, keywords):
+    lowered = text.lower()
+    return [k for k in keywords if k in lowered]
 
-    for i, row in enumerate(rows):
-        x = margin_left + i * (bar_w + bar_gap)
-        h = chart_h * row["count"] / max_count
-        y = margin_top + chart_h - h
-        color = colors[i % len(colors)]
 
-        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{h:.1f}" fill="{color}"/>')
-        parts.append(f'<text x="{x + bar_w/2:.1f}" y="{y - 10:.1f}" text-anchor="middle" font-size="12" font-family="Arial">{row["count"]}</text>')
-        parts.append(f'<text x="{x + bar_w/2:.1f}" y="{margin_top + chart_h + 20}" text-anchor="middle" font-size="12" font-family="Arial" transform="rotate(35 {x + bar_w/2:.1f} {margin_top + chart_h + 20})">{row["category"]}</text>')
-        parts.append(f'<text x="{x + bar_w/2:.1f}" y="{margin_top + chart_h + 45}" text-anchor="middle" font-size="11" fill="#555" font-family="Arial">{row["percentage"]:.2f}%</text>')
+def classify_task(title: str) -> str:
+    lowered = title.lower()
+    for task, kws in TASK_KEYWORDS.items():
+        if any(k in lowered for k in kws):
+            return task
+    return "Other"
 
-    parts.append('</svg>')
-    return "\n".join(parts)
+
+def classify_type(title: str) -> str:
+    lowered = title.lower()
+    if contains_any(lowered, EASY_INFERENCE_KEYWORDS):
+        return "Inference postproc"
+    if contains_any(lowered, EASY_TRAINING_KEYWORDS):
+        return "Loss / Training trick"
+    if contains_any(lowered, PLUGIN_KEYWORDS):
+        return "Adapter-Prompt"
+    if contains_any(lowered, ["data-free"]):
+        return "Data-free"
+    return "Other"
+
+
+def score_entry(title: str):
+    lowered = title.lower()
+
+    s1 = 1 if (
+        contains_any(lowered, EASY_INFERENCE_KEYWORDS)
+        or contains_any(lowered, EASY_TRAINING_KEYWORDS)
+        or contains_any(lowered, PLUGIN_KEYWORDS)
+    ) else 0
+    s2 = 0 if contains_any(lowered, ["dataset", "benchmark", "annotation"]) else 1
+    s3 = 0  # title-only pass, no code lookup
+    s4 = 1 if (
+        contains_any(lowered, EASY_INFERENCE_KEYWORDS)
+        or contains_any(lowered, EASY_TRAINING_KEYWORDS)
+        or contains_any(lowered, PLUGIN_KEYWORDS)
+    ) else 0
+
+    total = s1 + s2 + s3 + s4
+
+    if contains_any(lowered, PASS_KEYWORDS):
+        verdict = "PASS"
+    elif contains_any(lowered, EASY_INFERENCE_KEYWORDS + EASY_TRAINING_KEYWORDS + PLUGIN_KEYWORDS + EASY_STYLE_KEYWORDS):
+        verdict = "KEEP"
+    else:
+        verdict = "MAYBE"
+
+    ease = 1 + s1 + s2 + s4
+    ease = min(5, ease)
+
+    return s1, s2, s3, s4, total, verdict, ease
 
 
 def main():
-    rows = []
+    category_rows = []
+    all_rows = []
+
     for category, slug in PAGES.items():
         content = fetch_page_content(slug)
-        rows.append({"category": category, "count": count_accepted_entries(content)})
+        entries = extract_entries(content)
+        category_rows.append({"category": category, "count": len(entries)})
 
-    rows.sort(key=lambda x: x["count"], reverse=True)
-    total = sum(r["count"] for r in rows)
-    for r in rows:
-        r["percentage"] = (r["count"] / total * 100) if total else 0
+        for e in entries:
+            s1, s2, s3, s4, total, verdict, ease = score_entry(e["title"])
+            all_rows.append(
+                {
+                    "category": category,
+                    "paper_id": e["id"],
+                    "title": e["title"],
+                    "authors": e["authors"],
+                    "task": classify_task(e["title"]),
+                    "type": classify_type(e["title"]),
+                    "needs_training": "N" if classify_type(e["title"]) == "Inference postproc" else "Y",
+                    "extra_data": "Y" if contains_any(e["title"].lower(), ["dataset", "benchmark", "annotation"]) else "N",
+                    "code": "Unknown",
+                    "s1_mod_pos": s1,
+                    "s2_no_extra_data": s2,
+                    "s3_has_code": s3,
+                    "s4_pluggable": s4,
+                    "score_total": total,
+                    "verdict": verdict,
+                    "ease": ease,
+                    "keyword_hits": ", ".join(hit_keywords(e["title"], EASY_INFERENCE_KEYWORDS + EASY_TRAINING_KEYWORDS + PLUGIN_KEYWORDS + EASY_STYLE_KEYWORDS)),
+                }
+            )
 
-    with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
+    category_rows.sort(key=lambda x: x["count"], reverse=True)
+    total_count = sum(r["count"] for r in category_rows)
+    for r in category_rows:
+        r["percentage"] = r["count"] / total_count * 100 if total_count else 0.0
+
+    with CSV_CATEGORY_PATH.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["category", "count", "percentage"])
-        for r in rows:
+        for r in category_rows:
             writer.writerow([r["category"], r["count"], f"{r['percentage']:.4f}"])
 
-    SVG_PATH.write_text(build_svg(rows), encoding="utf-8")
+    all_rows.sort(key=lambda x: (x["category"], x["paper_id"]))
+    with CSV_ALL_PATH.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(all_rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(all_rows)
+
+    keep_rows = [r for r in all_rows if r["verdict"] == "KEEP"]
+    maybe_rows = [r for r in all_rows if r["verdict"] == "MAYBE"]
+    pass_rows = [r for r in all_rows if r["verdict"] == "PASS"]
 
     lines = [
-        "# ACM MM 2025 Accepted Papers 分类统计",
+        "# ACM MM 2025 全量 accepted papers 快速筛选（标题信号版）",
         "",
-        "数据来源：ACM MM 2025 官网各 accepted 页面（通过 WordPress JSON API 抓取并统计每条编号论文）。",
+        "数据来源：ACM MM 2025 官网所有 accepted 页面（WordPress JSON API）。",
+        "",
+        "## 1) 全量覆盖统计",
         "",
         "| 类别 | 数量 | 占比 |",
         "|---|---:|---:|",
     ]
-    for r in rows:
+    for r in category_rows:
         lines.append(f"| {r['category']} | {r['count']} | {r['percentage']:.2f}% |")
-    lines.append("")
-    lines.append(f"总计：**{total}**")
+
+    lines.extend([
+        "",
+        f"总计：**{total_count}** 篇（已遍历全部 accepted 列表条目）。",
+        "",
+        "## 2) 按标题规则的可实现性初筛",
+        "",
+        f"* KEEP（倾向小改动/易落地）：**{len(keep_rows)}**",
+        f"* MAYBE（信息不足，需二次确认）：**{len(maybe_rows)}**",
+        f"* PASS（标题即显示实现成本较高）：**{len(pass_rows)}**",
+        "",
+        "说明：本次为**全量标题级别**筛选；S3（是否有代码）默认 Unknown/0，后续可对 KEEP 集合再批量补 arXiv/GitHub 校验。",
+        "",
+        "## 3) 输出文件",
+        "",
+        "* `acmmm2025_all_papers_screening.csv`：所有论文逐条记录（含 task/type/score/verdict/ease）。",
+        "* `acmmm2025_accepted_papers_by_category.csv`：按类别统计。",
+    ])
+
     MD_PATH.write_text("\n".join(lines), encoding="utf-8")
 
-    print("Wrote:")
-    print(CSV_PATH)
-    print(SVG_PATH)
-    print(MD_PATH)
+    print(f"Total papers: {total_count}")
+    print(f"KEEP={len(keep_rows)} MAYBE={len(maybe_rows)} PASS={len(pass_rows)}")
+    print(f"Wrote {CSV_CATEGORY_PATH}")
+    print(f"Wrote {CSV_ALL_PATH}")
+    print(f"Wrote {MD_PATH}")
 
 
 if __name__ == "__main__":
