@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate Graph-OT Calibration (GOTC) vs baselines.
-
-Default uses synthetic toy embeddings designed to induce both hubness and noisy pairings.
-"""
+"""Evaluate Graph-OT Calibration (GOTC) vs baselines."""
 
 from __future__ import annotations
 
@@ -42,26 +39,22 @@ def l2_normalize(x: np.ndarray) -> np.ndarray:
 def make_toy_embeddings(
     n: int = 1000,
     d: int = 128,
-    clusters: int = 25,
-    hub_count: int = 20,
-    hub_strength: float = 1.0,
+    clusters: int = 40,
+    hub_count: int = 40,
+    hub_strength: float = 1.2,
     noise_rate: float = 0.0,
+    hard_swap_rate: float = 0.0,
     seed: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Generate paired embeddings with hubness and pair noise.
-
-    Pair noise is injected into target embeddings directly (not just labels), so
-    post-processing must correct noisy correspondences from relations.
-    """
+    """Synthetic hubness/noise scenario with controllable hard negatives."""
     rng = np.random.default_rng(seed)
 
-    centers = rng.normal(size=(clusters, d))
-    centers = l2_normalize(centers)
+    centers = l2_normalize(rng.normal(size=(clusters, d)))
     cid = rng.integers(0, clusters, size=n)
 
-    z = centers[cid] + 0.25 * rng.normal(size=(n, d))
-    img = z + 0.25 * rng.normal(size=(n, d))
-    txt = z + 0.25 * rng.normal(size=(n, d))
+    z = centers[cid] + 0.45 * rng.normal(size=(n, d))
+    img = 0.8 * z + 0.8 * rng.normal(size=(n, d))
+    txt = 0.8 * z + 0.8 * rng.normal(size=(n, d))
 
     hub_dir = rng.normal(size=(d,))
     hub_dir /= np.linalg.norm(hub_dir) + 1e-12
@@ -73,12 +66,20 @@ def make_toy_embeddings(
 
     gt = np.arange(n)
 
-    # Inject pair noise by shuffling a fraction of target embeddings.
     if noise_rate > 0:
         n_noisy = int(noise_rate * n)
         noisy_idx = rng.choice(n, size=n_noisy, replace=False)
         shuffled = rng.permutation(noisy_idx)
         txt[noisy_idx] = txt[shuffled]
+
+    if hard_swap_rate > 0:
+        n_hard = int(hard_swap_rate * n)
+        chosen = rng.choice(n, size=n_hard, replace=False)
+        for i in chosen:
+            same = np.where(cid == cid[i])[0]
+            if same.size > 1:
+                j = int(rng.choice(same[same != i]))
+                txt[i], txt[j] = txt[j].copy(), txt[i].copy()
 
     txt = l2_normalize(txt)
     return img, txt, gt
@@ -137,7 +138,13 @@ def fmt(m: Metrics) -> str:
     )
 
 
-def evaluate_once(args: argparse.Namespace, noise_rate: float) -> Dict[str, Metrics]:
+def avg_metrics(ms: list[Metrics]) -> Metrics:
+    vals = np.array([[m.r1_i2t, m.r5_i2t, m.r10_i2t, m.r1_t2i, m.r5_t2i, m.r10_t2i, m.hub_gini, m.hub_skew] for m in ms])
+    mu = vals.mean(axis=0)
+    return Metrics(*[float(x) for x in mu])
+
+
+def evaluate_once(args: argparse.Namespace, noise_rate: float, seed: int) -> Dict[str, Metrics]:
     img, txt, gt = make_toy_embeddings(
         n=args.n,
         d=args.d,
@@ -145,7 +152,8 @@ def evaluate_once(args: argparse.Namespace, noise_rate: float) -> Dict[str, Metr
         hub_count=args.hub_count,
         hub_strength=args.hub_strength,
         noise_rate=noise_rate,
-        seed=args.seed,
+        hard_swap_rate=args.hard_swap_rate,
+        seed=seed,
     )
     S = img @ txt.T
 
@@ -179,27 +187,35 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--n", type=int, default=1000)
     p.add_argument("--d", type=int, default=128)
-    p.add_argument("--clusters", type=int, default=25)
-    p.add_argument("--hub_count", type=int, default=20)
-    p.add_argument("--hub_strength", type=float, default=1.0)
-    p.add_argument("--k", type=int, default=25)
+    p.add_argument("--clusters", type=int, default=40)
+    p.add_argument("--hub_count", type=int, default=40)
+    p.add_argument("--hub_strength", type=float, default=1.2)
+    p.add_argument("--hard_swap_rate", type=float, default=0.2)
+    p.add_argument("--k", type=int, default=30)
     p.add_argument("--outer_iters", type=int, default=3)
-    p.add_argument("--sinkhorn_iters", type=int, default=5)
-    p.add_argument("--eps", type=float, default=0.1)
+    p.add_argument("--sinkhorn_iters", type=int, default=20)
+    p.add_argument("--eps", type=float, default=0.06)
     p.add_argument("--prop_steps", type=int, default=2)
     p.add_argument("--alpha", type=float, default=0.8)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--noise_rate", type=float, default=None, help="Single noise rate run")
+    p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--num_seeds", type=int, default=5)
+    p.add_argument("--noise_rate", type=float, default=None)
     p.add_argument("--noise_grid", type=float, nargs="*", default=[0.0, 0.1, 0.2, 0.4])
     args = p.parse_args()
 
     grid = [args.noise_rate] if args.noise_rate is not None else list(args.noise_grid)
+
     for nr in grid:
-        print(f"\n=== noise_rate={nr:.2f} ===")
-        res = evaluate_once(args, nr)
+        agg: Dict[str, list[Metrics]] = {k: [] for k in ["baseline", "ot_only", "prop_only", "gotc"]}
+        for sid in range(args.seed, args.seed + args.num_seeds):
+            out = evaluate_once(args, nr, sid)
+            for name in agg:
+                agg[name].append(out[name])
+
+        print(f"\n=== noise_rate={nr:.2f} (avg over {args.num_seeds} seeds) ===")
         print("method\tR1_i2t\tR5_i2t\tR10_i2t\tR1_t2i\tR5_t2i\tR10_t2i\tHubGini\tHubSkew")
         for name in ["baseline", "ot_only", "prop_only", "gotc"]:
-            print(f"{name}\t{fmt(res[name])}")
+            print(f"{name}\t{fmt(avg_metrics(agg[name]))}")
 
 
 if __name__ == "__main__":
