@@ -143,8 +143,7 @@ def gotc(
     alpha: float = 0.9,
 ) -> ArrayLike:
     """Alternate OT calibration and bidirectional relation propagation."""
-    S_orig = np.asarray(S, dtype=np.float64)
-    S_cur = S_orig.copy()
+    S_cur = np.asarray(S, dtype=np.float64)
     eps_cur = float(eps)
 
     for _ in range(max(1, outer_iters)):
@@ -158,8 +157,8 @@ def gotc(
         S_t = propagate_scores(S_ot.T, A_t, steps=prop_steps, alpha=alpha).T
 
         S_mix = _confidence_fusion(S_ot, S_q, S_t)
-        # keep OT as backbone, use propagation for correction and retain raw similarity for precision
-        S_cur = 0.60 * S_ot + 0.25 * S_mix + 0.15 * S_orig
+        # envelope fusion: keep OT ranking backbone but allow relation correction boosts
+        S_cur = np.maximum(S_ot, S_mix)
         eps_cur *= 0.9  # anneal
 
     return S_cur
