@@ -1,0 +1,9 @@
+datasets:
+  - hotpotqa
+  - musique
+  - 2wikimultihopqa
+  - strategyqa
+  - wikihop
+  - proofwriter
+splits: [train, validation]
+limit_per_split: 200
