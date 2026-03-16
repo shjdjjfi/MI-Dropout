@@ -1,0 +1,14 @@
+datasets>=2.19.0
+transformers>=4.43.0
+peft>=0.11.1
+accelerate>=0.31.0
+bitsandbytes>=0.43.1
+trl>=0.9.6
+torch>=2.2.0
+numpy>=1.26.0
+pandas>=2.2.0
+pyyaml>=6.0.1
+tqdm>=4.66.0
+requests>=2.32.0
+matplotlib>=3.8.0
+scikit-learn>=1.5.0

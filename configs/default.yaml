@@ -1,0 +1,69 @@
+seed: 42
+output_root: outputs
+
+dataset:
+  hf_id: GBaker/MedQA-USMLE-4-options-hf
+  fallback_hf_id: bigbio/med_qa
+  subset: null
+  split_mapping:
+    train: train
+    validation: validation
+    test: test
+  max_samples_per_split: null
+
+teacher:
+  backend: hf_local # hf_local | api
+  model_name: meta-llama/Meta-Llama-3-70B-Instruct
+  api_base_url: http://localhost:8000/v1
+  api_key_env: OPENAI_API_KEY
+  api_model: gpt-4o-mini
+  max_new_tokens: 512
+  temperature: 0.0
+  top_p: 1.0
+  retries: 3
+  n_samples: 1
+  mode: cot_answer # cot_answer | answer_only
+
+sft:
+  variant: cot_answer
+  short_rationale_tokens: 80
+  rationale_truncation_tokens: null
+  filtered_only_correct: false
+  shuffled_cot: false
+  shuffled_answer_protocol: keep_teacher # keep_teacher | keep_gold
+
+student:
+  model_name: meta-llama/Llama-3.2-3B-Instruct
+  load_in_4bit: true
+  max_length: 1024
+
+training:
+  output_dir: outputs/checkpoints/default
+  method: lora # full | lora | qlora
+  learning_rate: 2.0e-4
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 8
+  num_train_epochs: 2
+  logging_steps: 10
+  save_steps: 100
+  eval_steps: 100
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  bf16: true
+  fp16: false
+  max_grad_norm: 1.0
+  dev_ratio: 0.1
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj]
+
+eval:
+  max_new_tokens: 32
+  temperature: 0.0
+  output_subdir: eval
+
+ablations:
+  sample_efficiency_fracs: [0.1, 0.25, 0.5, 1.0]
