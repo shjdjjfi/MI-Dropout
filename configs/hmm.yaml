@@ -1,0 +1,7 @@
+type: hmm
+name: hmm_latent
+vocab_size: 40
+num_states: 5
+trans_temp: 1.0
+emission_temp: 1.0
+seed: 3

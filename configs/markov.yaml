@@ -1,0 +1,7 @@
+type: markov
+name: markov_medium
+vocab_size: 48
+sparsity: 0.3
+temperature: 1.0
+regime: medium
+seed: 2

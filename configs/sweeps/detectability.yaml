@@ -1,0 +1,29 @@
+seed: 7
+alpha: 0.05
+watermark:
+  key: 12345
+  context_dependent: true
+sources:
+  - type: iid
+    name: iid_zipf
+    vocab_size: 64
+    dist: zipf
+    zipf_alpha: 1.15
+    seed: 1
+  - type: markov
+    name: markov_medium
+    vocab_size: 48
+    sparsity: 0.25
+    temperature: 1.0
+    regime: medium
+    seed: 2
+  - type: hmm
+    name: hmm_latent
+    vocab_size: 40
+    num_states: 5
+    seed: 3
+sweep:
+  n: [16, 32, 64, 128, 256, 512]
+  delta: [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
+  gamma: [0.25, 0.5, 0.75]
+  m: 100

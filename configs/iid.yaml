@@ -1,0 +1,7 @@
+type: iid
+name: iid_zipf
+vocab_size: 64
+dist: zipf
+zipf_alpha: 1.1
+temperature: 1.0
+seed: 1
