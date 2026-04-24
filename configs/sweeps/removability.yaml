@@ -1,0 +1,46 @@
+alpha: 0.05
+n: 128
+gamma: 0.5
+quality_mode: global
+exact_max_n: 20
+exact_max_budget: 0.05
+watermark:
+  key: 12345
+  context_dependent: true
+sources:
+  - type: iid
+    name: iid_zipf
+    vocab_size: 64
+    dist: zipf
+    zipf_alpha: 1.15
+    seed: 1
+  - type: markov
+    name: markov_medium
+    vocab_size: 48
+    sparsity: 0.25
+    temperature: 1.0
+    regime: medium
+    seed: 2
+  - type: hmm
+    name: hmm_latent
+    vocab_size: 40
+    num_states: 5
+    seed: 3
+seeds: [11, 17, 23, 31, 47]
+attackers: [exact, greedy, beam, mcmc]
+attacker_cfg:
+  exact:
+    max_edits: 2
+    max_states: 150000
+  greedy:
+    candidate_subset: 8
+  beam:
+    beam_width: 6
+    max_edit_depth: 6
+  mcmc:
+    steps: 120
+    beta: 8.0
+sweep:
+  delta: [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
+  budget: [0.0, 0.01, 0.02, 0.05, 0.1, 0.2]
+  epsilon: [0.0, 0.01, 0.02, 0.05, 0.1]
